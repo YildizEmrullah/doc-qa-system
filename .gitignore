@@ -1,0 +1,49 @@
+# ─── Python ──────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+
+# ─── Sanal Ortam ─────────────────────────────────────────────────
+venv/
+env/
+.venv/
+.env/
+
+# ─── Ortam Değişkenleri (GİZLİ!) ─────────────────────────────────
+.env
+# NOT: .env.example git'e eklenebilir
+
+# ─── Yüklenen Dosyalar ───────────────────────────────────────────
+uploads/*
+!uploads/.gitkeep
+
+# ─── Veri Dosyaları ──────────────────────────────────────────────
+data/*
+!data/.gitkeep
+
+# ─── Vektör Veritabanı ───────────────────────────────────────────
+vector_store/*
+!vector_store/.gitkeep
+
+# ─── IDE ─────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ─── OS ──────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ─── Test ────────────────────────────────────────────────────────
+.pytest_cache/
+.coverage
+htmlcov/
