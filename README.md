@@ -1,121 +1,160 @@
-# DocuAsk — Büyük Dil Modeli Destekli Doküman Tabanlı Akıllı Soru-Cevap Sistemi
+# DocuAsk — RAG-Based Intelligent Document Q&A System
 
-> Bitirme Projesi · Python · FastAPI · RAG · ChromaDB · OpenAI
+> Bachelor's Capstone Project · Python · FastAPI · ChromaDB · Llama 3.3 · Sentence Transformers · OCR
 
----
-
-## İçindekiler
-
-1. [Proje Tanımı](#1-proje-tanımı)
-2. [Kullanılan Teknolojiler](#2-kullanılan-teknolojiler)
-3. [Sistem Mimarisi](#3-sistem-mimarisi)
-4. [Kurulum Adımları](#4-kurulum-adımları)
-5. [Ortam Değişkenleri (.env)](#5-ortam-değişkenleri-env)
-6. [Uygulamayı Çalıştırma](#6-uygulamayı-çalıştırma)
-7. [API Endpoint Listesi](#7-api-endpoint-listesi)
-8. [RAG Akışı](#8-rag-akışı)
-9. [Demo Kullanım Senaryosu](#9-demo-kullanım-senaryosu)
-10. [Gelecek Geliştirmeler](#10-gelecek-geliştirmeler)
-11. [Akademik Rapor İçin Teknik Açıklamalar](#11-akademik-rapor-için-teknik-açıklamalar)
+![Python](https://img.shields.io/badge/Python-3.10+-blue?logo=python&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-0.111-009688?logo=fastapi&logoColor=white)
+![ChromaDB](https://img.shields.io/badge/ChromaDB-0.5-orange)
+![License](https://img.shields.io/badge/License-MIT-green)
 
 ---
 
-## 1. Proje Tanımı
+## Overview
 
-**DocuAsk**, kullanıcıların PDF ve TXT formatındaki belgeler üzerinden doğal dilde soru sorabildikleri, yapay zeka destekli bir web uygulamasıdır.
+**DocuAsk** is a web application that enables users to ask natural language questions about their own PDF and TXT documents and receive accurate, source-cited answers powered by a **RAG (Retrieval-Augmented Generation)** pipeline.
 
-### Problem Tanımı
+### Problem Statement
 
-Geleneksel arama motorları anahtar kelime eşleşmesine dayanır ve belgenin **anlamsal içeriğini** kavrayamaz. Kullanıcılar, uzun akademik makaleler, ders notları veya teknik belgelerdeki bilgiye hızla erişmek istediklerinde ilgili bölümü manuel olarak bulmak zorunda kalırlar.
+Traditional keyword search cannot understand the *semantic content* of a document. Users studying long academic papers, lecture slides, or technical manuals must manually scan through pages to find relevant information — a slow and inefficient process.
 
-### Çözüm
+### Solution
 
-**RAG (Retrieval-Augmented Generation)** mimarisi bu problemi iki aşamada çözer:
-1. **Retrieval:** Kullanıcının sorusuna anlamsal olarak en yakın belge parçaları bulunur.
-2. **Generation:** Büyük dil modeli (LLM) yalnızca bu parçalara dayalı, kaynak gösterir şekilde cevap üretir.
+DocuAsk solves this with a two-stage AI pipeline:
+
+1. **Retrieval** — The user's question is converted to a vector embedding and matched against pre-indexed document chunks using cosine similarity.
+2. **Generation** — A large language model (LLM) generates a response *strictly* from the retrieved context, with page-level citations.
+
+The system explicitly refuses to hallucinate: if the answer is not in the document, it says so.
 
 ---
 
-## 2. Kullanılan Teknolojiler
+## Features
 
-| Katman | Teknoloji | Versiyon | Açıklama |
+- **Multi-format support** — PDF (text-based and scanned/OCR) and TXT files
+- **Semantic search** — Vector similarity via ChromaDB, not keyword matching
+- **Source citations** — Every answer references the exact page and chunk it came from
+- **Free LLM** — Powered by Groq API (Llama 3.3 70B), no OpenAI cost required
+- **Local embeddings** — `all-MiniLM-L6-v2` via Sentence Transformers, runs offline
+- **OCR pipeline** — Scanned PDFs are processed via Tesseract + PyMuPDF
+- **Clean REST API** — FastAPI with auto-generated Swagger docs at `/api/docs`
+- **Modern Web UI** — Vanilla JS, no framework dependency, markdown-rendered responses
+
+---
+
+## Tech Stack
+
+| Layer | Technology | Version | Role |
 |---|---|---|---|
-| **Backend** | FastAPI | 0.111 | Async REST API, Swagger otomatik dokümantasyon |
-| **Sunucu** | Uvicorn | 0.29 | ASGI sunucu |
-| **Frontend** | HTML/CSS/JS | — | Vanilla JS, framework bağımlılığı yok |
-| **PDF Okuma** | pdfplumber | 0.11 | Sayfa koordinatlı metin çıkarma |
-| **Embedding** | OpenAI / sentence-transformers | — | Anlamsal vektör temsili |
-| **LLM** | GPT-4o-mini | — | Cevap üretimi |
-| **Vektör DB** | ChromaDB | 0.5 | Kalıcı vektör deposu |
-| **Veri Şeması** | Pydantic v2 | 2.7 | Tip güvenli istek/yanıt modelleri |
-| **Test** | Pytest | 8.2 | Birim ve entegrasyon testleri |
+| **Backend** | FastAPI | 0.111 | Async REST API, automatic Swagger docs |
+| **Server** | Uvicorn | 0.29 | ASGI server |
+| **Frontend** | HTML / CSS / Vanilla JS | — | No framework dependency |
+| **PDF Parsing** | pdfplumber + PyMuPDF | 0.11 / 1.27 | Text extraction (primary + fallback) |
+| **OCR** | Tesseract + pytesseract | 5.5 | Scanned PDF text recognition |
+| **Embeddings** | Sentence Transformers | — | `all-MiniLM-L6-v2`, runs locally |
+| **LLM** | Groq API (Llama 3.3 70B) | — | Answer generation, free tier |
+| **Vector DB** | ChromaDB | 0.5 | Persistent vector store, cosine similarity |
+| **Schema** | Pydantic v2 | 2.7 | Type-safe request/response models |
+| **Testing** | Pytest | 8.2 | Unit and integration tests |
 
 ---
 
-## 3. Sistem Mimarisi
+## Architecture
 
 ```
-┌──────────────────────────────────────────────────────────────┐
-│  TARAYICI (HTML/CSS/JS)                                      │
-│  Dosya Yükleme · Soru Formu · Cevap + Kaynak Gösterimi      │
-└────────────────────┬─────────────────────────────────────────┘
-                     │ HTTP REST
-┌────────────────────▼─────────────────────────────────────────┐
-│  FASTAPI BACKEND                                              │
-│                                                              │
-│  POST /api/upload          POST /api/ask                     │
-│        │                         │                           │
-│  ┌─────▼──────────┐    ┌─────────▼──────────┐               │
-│  │ INDEXING       │    │ QUERY PIPELINE     │               │
-│  │ ─────────────  │    │ ──────────────     │               │
-│  │ Metin Çıkart   │    │ Soru → Embed       │               │
-│  │ Chunk'la       │    │ Similarity Search  │               │
-│  │ Embed Üret     │    │ Context Birleştir  │               │
-│  │ ChromaDB'ye    │    │ LLM'e Gönder       │               │
-│  └────────────────┘    └──────────────┬─────┘               │
-└────────────────────────────────────── ┼─────────────────────┘
+┌──────────────────────────────────────────────────────────┐
+│  BROWSER  (HTML / CSS / Vanilla JS)                      │
+│  File Upload · Question Form · Answer + Source Display   │
+└─────────────────────┬────────────────────────────────────┘
+                      │  HTTP REST
+┌─────────────────────▼────────────────────────────────────┐
+│  FASTAPI BACKEND                                          │
+│                                                           │
+│  POST /api/upload            POST /api/ask                │
+│        │                           │                      │
+│  ┌─────▼──────────┐      ┌─────────▼──────────┐          │
+│  │ INDEXING       │      │ QUERY PIPELINE     │          │
+│  │ ─────────────  │      │ ─────────────────  │          │
+│  │ Extract text   │      │ Embed question     │          │
+│  │ Chunk (1200c)  │      │ Similarity search  │          │
+│  │ Embed chunks   │      │ Build context      │          │
+│  │ Store vectors  │      │ Call LLM           │          │
+│  └────────────────┘      └────────────┬───────┘          │
+└─────────────────────────────────────  ┼ ─────────────────┘
                                         │
-         ┌──────────────────────────────┼────────────┐
-         │                             │            │
-  ┌──────▼──────┐             ┌────────▼──────┐    │
-  │  ChromaDB   │             │  OpenAI API   │    │
-  │  (Vektörler │             │  Embeddings + │    │
-  │  + Metadata)│             │  GPT-4o-mini  │    │
-  └─────────────┘             └───────────────┘    │
+          ┌─────────────────────────────┼────────────┐
+          │                            │            │
+   ┌──────▼──────┐              ┌──────▼──────┐    │
+   │  ChromaDB   │              │  Groq API   │    │
+   │  (vectors + │              │  Llama 3.3  │    │
+   │  metadata)  │              │  70B        │    │
+   └─────────────┘              └─────────────┘    │
                                                    │
-                              data/documents.json ─┘
+                               data/documents.json ┘
 ```
 
-### Klasör Yapısı
+### RAG Pipeline — Step by Step
+
+**Indexing** (triggered on file upload):
+```
+PDF / TXT File
+    ↓
+[1] Text Extraction    → pdfplumber (primary) → PyMuPDF (fallback) → Tesseract OCR (scanned)
+    ↓
+[2] Text Cleaning      → Remove headers/footers, fix hyphenation, normalize whitespace
+    ↓
+[3] Chunking           → 1200-char sliding window, 150-char overlap
+    ↓
+[4] Embedding          → all-MiniLM-L6-v2 → 384-dimensional vectors
+    ↓
+[5] Vector Store       → ChromaDB with metadata (page_number, chunk_index, filename)
+```
+
+**Querying** (triggered on question submit):
+```
+User Question
+    ↓
+[1] Question Embedding → Same model as indexing
+    ↓
+[2] Similarity Search  → Cosine similarity, top-k chunks retrieved
+    ↓
+[3] Context Building   → Deduplicated chunks formatted with page references
+    ↓
+[4] LLM Generation    → Llama 3.3 70B with strict "answer from context only" prompt
+    ↓
+[5] Response Format   → Answer text + source chunks + page numbers + similarity scores
+```
+
+### Project Structure
 
 ```
 doc-qa-system/
 ├── app/
-│   ├── main.py                  # FastAPI giriş noktası
-│   ├── config.py                # Ortam değişkenleri
+│   ├── main.py                  # FastAPI entry point, routers, middleware
+│   ├── config.py                # Environment variable management (pydantic-settings)
 │   ├── models/
-│   │   └── schemas.py           # Pydantic şemaları
+│   │   └── schemas.py           # Pydantic request/response schemas
 │   ├── services/
-│   │   ├── document_loader.py   # PDF/TXT okuma
-│   │   ├── text_splitter.py     # Chunking
-│   │   ├── embedding_service.py # Vektörleştirme
-│   │   ├── vector_store.py      # ChromaDB işlemleri
-│   │   ├── llm_service.py       # LLM cevap üretimi
-│   │   └── rag_service.py       # Pipeline orkestratörü
+│   │   ├── document_loader.py   # PDF/TXT/OCR text extraction
+│   │   ├── text_splitter.py     # Sliding-window chunking
+│   │   ├── embedding_service.py # Sentence Transformers wrapper
+│   │   ├── vector_store.py      # ChromaDB CRUD operations
+│   │   ├── llm_service.py       # Groq/OpenAI/Demo LLM abstraction
+│   │   └── rag_service.py       # End-to-end pipeline orchestration
 │   ├── routers/
-│   │   ├── upload.py
-│   │   ├── ask.py
-│   │   └── documents.py
+│   │   ├── upload.py            # POST /api/upload
+│   │   ├── ask.py               # POST /api/ask
+│   │   └── documents.py         # GET/DELETE /api/documents
 │   └── utils/
 │       └── helpers.py
 ├── static/
-│   ├── css/style.css
-│   └── js/app.js
+│   ├── css/style.css            # Custom CSS (no framework)
+│   └── js/app.js                # Vanilla JS application class
 ├── templates/
-│   └── index.html
-├── uploads/                     # Yüklenen dosyalar
-├── data/                        # documents.json
-├── vector_store/                # ChromaDB kalıcı verisi
+│   └── index.html               # Jinja2 single-page template
+├── tessdata/                    # Tesseract language data (tur + eng)
+├── uploads/                     # Uploaded files (gitignored)
+├── data/                        # Document metadata JSON
+├── vector_store/                # ChromaDB persistent storage (gitignored)
 ├── tests/
 │   └── test_main.py
 ├── .env.example
@@ -125,109 +164,131 @@ doc-qa-system/
 
 ---
 
-## 4. Kurulum Adımları
+## Getting Started
 
-### Ön Gereksinimler
-- Python 3.10 veya üzeri
-- pip paket yöneticisi
-- (Opsiyonel) OpenAI hesabı ve API anahtarı
+### Prerequisites
 
-### Adım 1 — Projeyi İndirin
+- Python 3.10+
+- [Groq API key](https://console.groq.com) — free, no credit card required
+- *(Optional)* [Tesseract OCR](https://github.com/UB-Mannheim/tesseract/wiki) for scanned PDFs
+
+### Installation
 
 ```bash
-cd C:\Users\Emrullah
-# Proje zaten doc-qa-system/ klasöründe mevcut
+# 1. Clone the repository
+git clone https://github.com/YildizEmrullah/doc-qa-system.git
 cd doc-qa-system
-```
 
-### Adım 2 — Sanal Ortam Oluşturun
+# 2. Create virtual environment
+python -m venv .venv
 
-```bash
-# Windows PowerShell
-python -m venv venv
-.\venv\Scripts\activate
-```
+# Windows
+.venv\Scripts\activate
+# macOS / Linux
+source .venv/bin/activate
 
-### Adım 3 — Bağımlılıkları Yükleyin
-
-```bash
+# 3. Install dependencies
 pip install -r requirements.txt
+
+# 4. Configure environment
+copy .env.example .env   # Windows
+# cp .env.example .env   # macOS/Linux
 ```
 
-> **Not:** Eğer sentence-transformers kullanmak istiyorsanız (OpenAI yoksa):
-> ```bash
-> pip install sentence-transformers torch
-> ```
-
-### Adım 4 — Ortam Değişkenlerini Ayarlayın
-
-```bash
-# .env.example dosyasını kopyala
-copy .env.example .env
-# Ardından .env dosyasını düzenleyin
-```
-
----
-
-## 5. Ortam Değişkenleri (.env)
+### Environment Variables (`.env`)
 
 ```env
-# OpenAI API anahtarı (yoksa Demo Modu aktif olur)
-OPENAI_API_KEY=sk-...
+# LLM — get a free key at https://console.groq.com
+GROQ_API_KEY=gsk_...
 
-# Embedding modeli
+# Optional: OpenAI (falls back to Groq if not set)
+OPENAI_API_KEY=
+
+# Embedding model (runs locally, no API key needed)
 EMBEDDING_MODEL=text-embedding-3-small
 
-# LLM modeli
+# LLM model
 LLM_MODEL=gpt-4o-mini
 
-# Vektör veritabanı
+# Vector database
 VECTOR_DB=chroma
 
-# RAG parametreleri
-CHUNK_SIZE=800
+# RAG parameters
+CHUNK_SIZE=1200
 CHUNK_OVERLAP=150
 TOP_K_RESULTS=5
 MAX_TOKENS=1500
 ```
 
-### OpenAI API Anahtarı Nereye Koyulur?
+### Run
 
-1. [platform.openai.com](https://platform.openai.com) adresinden hesap açın
-2. **API Keys** bölümünden yeni key oluşturun
-3. `.env` dosyasındaki `OPENAI_API_KEY=` satırına yapıştırın
+```bash
+uvicorn app.main:app --reload
+```
 
-> **Demo Modu:** API anahtarı olmadan sistem çalışır, retrieval (benzer bölüm bulma) işlevi gösterilir ancak gerçek LLM cevabı üretilmez. Jüri gösterimleri için yeterlidir.
+Open **http://localhost:8000** in your browser.
+
+Swagger API docs: **http://localhost:8000/api/docs**
 
 ---
 
-## 6. Uygulamayı Çalıştırma
+## API Reference
 
-### Geliştirme Sunucusu (Önerilen)
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/` | Web UI |
+| `GET` | `/api/health` | System health check |
+| `POST` | `/api/upload` | Upload and index a PDF/TXT file |
+| `POST` | `/api/ask` | Submit a question, receive answer + sources |
+| `GET` | `/api/documents` | List all indexed documents |
+| `GET` | `/api/documents/stats` | System statistics |
+| `DELETE` | `/api/documents/{id}` | Delete a document and its vectors |
+| `GET` | `/api/docs` | Swagger UI |
 
-```bash
-# Sanal ortamı aktifleştirmeyi unutmayın
-.\venv\Scripts\activate
+### POST `/api/ask` — Request
 
-# Çalıştır
-python run.py
+```json
+{
+  "question": "What is attention mechanism?",
+  "document_id": "abc123def456",
+  "top_k": 5
+}
 ```
 
-Uygulama şu adreste açılır: **http://localhost:8000**
+### POST `/api/ask` — Response
 
-### Alternatif — Uvicorn Direkt
-
-```bash
-uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+```json
+{
+  "answer": "The attention mechanism allows the model to weigh...",
+  "sources": [
+    {
+      "text": "Attention mechanisms were introduced by Bahdanau et al...",
+      "filename": "transformer_paper.pdf",
+      "page_number": 4,
+      "chunk_index": 12,
+      "similarity_score": 0.91
+    }
+  ],
+  "processing_time_ms": 1243,
+  "model_used": "Groq/Llama-3.3-70b"
+}
 ```
 
-### Swagger API Dökümantasyonu
+---
 
-```
-http://localhost:8000/api/docs
-```
+## OCR Support
 
-### Testleri Çalıştır
+DocuAsk supports scanned (image-based) PDFs through a three-tier extraction pipeline:
+
+1. **pdfplumber** — word-coordinate-based extraction (fastest, best quality)
+2. **PyMuPDF** — fallback for PDFs pdfplumber cannot parse
+3. **Tesseract OCR** — for fully scanned pages with no embedded text
+
+To enable OCR, install [Tesseract](https://github.com/UB-Mannheim/tesseract/wiki) and place `tur.traineddata` + `eng.traineddata` in the `tessdata/` directory.
+
+---
+
+## Running Tests
 
 ```bash
 pytest tests/ -v
@@ -235,185 +296,36 @@ pytest tests/ -v
 
 ---
 
-## 7. API Endpoint Listesi
+## Future Work
 
-| Metod | Endpoint | Açıklama |
-|---|---|---|
-| `GET` | `/` | Web arayüzü |
-| `GET` | `/api/health` | Sistem sağlık kontrolü |
-| `POST` | `/api/upload` | PDF/TXT yükle ve işle |
-| `POST` | `/api/ask` | Soru sor, cevap al |
-| `GET` | `/api/documents` | Yüklü dokümanları listele |
-| `GET` | `/api/documents/stats` | Sistem istatistikleri |
-| `DELETE` | `/api/documents/{id}` | Dokümanı sil |
-| `GET` | `/api/docs` | Swagger UI |
-
-### POST /api/ask — İstek Gövdesi
-
-```json
-{
-  "question": "Makine öğrenmesi nedir?",
-  "document_id": "abc123",
-  "top_k": 5
-}
-```
-
-### POST /api/ask — Yanıt
-
-```json
-{
-  "answer": "Makine öğrenmesi, sistemlerin veriden otomatik öğrenmesini...",
-  "sources": [
-    {
-      "text": "Makine öğrenmesi algoritmaları üç ana kategoriye...",
-      "filename": "ders_notu.pdf",
-      "page_number": 4,
-      "chunk_index": 12,
-      "similarity_score": 0.91
-    }
-  ],
-  "processing_time_ms": 1243,
-  "model_used": "gpt-4o-mini"
-}
-```
+- [ ] Multi-turn conversation memory (chat history)
+- [ ] Re-ranking with cross-encoder models
+- [ ] Streaming LLM responses (Server-Sent Events)
+- [ ] User session management (per-user document isolation)
+- [ ] Fine-tuned domain-specific embedding model
+- [ ] Docker containerization
+- [ ] Kubernetes deployment with horizontal scaling
 
 ---
 
-## 8. RAG Akışı
+## Academic Context
 
-```
-INDEXING (Dosya Yüklendiğinde)
-──────────────────────────────────────────────────
-PDF/TXT Dosyası
-    ↓
-[1] Metin Çıkarma     → pdfplumber sayfa sayfa metin alır
-    ↓
-[2] Temizleme         → Gereksiz boşluk, başlık/altbilgi temizlenir
-    ↓
-[3] Chunking          → 800 kar. parça, 150 kar. örtüşme (sliding window)
-    ↓
-[4] Embedding         → text-embedding-3-small → 1536 boyutlu vektör
-    ↓
-[5] ChromaDB Kaydı    → vektör + metadata (sayfa no, chunk index, dosya adı)
+This project was developed as a Bachelor's capstone thesis exploring the integration of large language models with document retrieval systems.
 
-QUERYING (Soru Sorulduğunda)
-──────────────────────────────────────────────────
-Kullanıcı Sorusu
-    ↓
-[1] Soru Embedding    → Soruyu vektöre çevir
-    ↓
-[2] Similarity Search → ChromaDB'de cosine similarity ile top-5 chunk bul
-    ↓
-[3] Prompt Hazırla    → Bulunan chunk'lar + soru → prompt template
-    ↓
-[4] LLM Çağrısı       → GPT-4o-mini sadece context'ten cevap üretir
-    ↓
-[5] Yanıt Formatla    → Cevap + kaynak chunk'lar + sayfa no → JSON
-    ↓
-Kullanıcıya Göster
-```
+**Key research areas addressed:**
+- Hallucination mitigation in LLMs via grounded generation
+- Semantic search vs. keyword search in closed-domain QA
+- Chunking strategy impact on retrieval quality
+- Trade-offs between cloud LLMs (OpenAI) and open-source alternatives (Llama)
 
-### LLM Sistem Prompt'u
-
-```
-Sen doküman tabanlı bir soru-cevap asistanısın.
-Sadece verilen bağlam bilgilerine dayanarak cevap ver.
-Eğer cevap bağlamda yoksa "Bu bilgi yüklenen dokümanda bulunamadı." de.
-Asla tahmin yapma. Cevabı açık, kısa ve akademik dille ver.
-```
+**Reference:** Lewis et al. (2020). *Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks*. NeurIPS 2020.
 
 ---
 
-## 9. Demo Kullanım Senaryosu
+## License
 
-### Jüri Sunum Akışı (5 dakika)
-
-1. **[0:00–0:30]** Tarayıcıda `http://localhost:8000` aç
-   - İstatistik kartlarını göster (başlangıçta sıfır)
-   - "RAG mimarisi bu panelde canlı çalışıyor" de
-
-2. **[0:30–1:30]** Bir PDF yükle (ders notu, makale vb.)
-   - Sürükle-bırak ile yükle
-   - İlerleme adımlarını göster: "Metin çıkarılıyor → Parçalanıyor → Embedding"
-   - İstatistikler güncellenir: chunk sayısı artar
-
-3. **[1:30–3:30]** Üç farklı soru sor
-
-   ```
-   Soru 1: "Bu doküman ne hakkında?"
-   → Genel özet cevabı + 5 kaynak bölümü
-
-   Soru 2: "[Belgede geçen spesifik konu] nedir?"
-   → Kesin, sayfa numaralı kaynak cevabı
-
-   Soru 3: "Bu belgede olmayan bir şey" (halüsinasyon testi)
-   → "Bu bilgi yüklenen dokümanda bulunamadı." — Sistem doğruyu söylüyor!
-   ```
-
-4. **[3:30–4:30]** Kaynak panelini incele
-   - "Sayfa 4'ten geldi, %91 eşleşme" göster
-   - "Bu geleneksel aramadan farklı: anlamsal benzerlik kullanıyoruz" açıkla
-
-5. **[4:30–5:00]** Mimari şemayı göster, sorular
+MIT License — see [LICENSE](LICENSE) for details.
 
 ---
 
-## 10. Gelecek Geliştirmeler
-
-### Kısa Vadeli (v1.1)
-- [ ] Konuşma geçmişi (önceki soruları hatırla)
-- [ ] Doküman özetleme endpoint'i (`POST /api/summarize`)
-- [ ] Cevap güven skoru gösterimi
-- [ ] Karanlık mod
-
-### Orta Vadeli (v1.2)
-- [ ] Ollama entegrasyonu (tamamen offline/ücretsiz LLM)
-- [ ] Re-ranking (cross-encoder ile sonuçları yeniden sırala)
-- [ ] Kullanıcı oturum yönetimi (her kullanıcı kendi dokümanları)
-- [ ] SQLite ile soru geçmişi kayıt
-
-### İleri Düzey (v2.0)
-- [ ] Taramalı PDF OCR desteği (pytesseract)
-- [ ] Çok dilli embedding desteği
-- [ ] Kubernetes ile ölçeklenebilir dağıtım
-- [ ] LLM Fine-tuning (domain-specific model)
-
----
-
-## 11. Akademik Rapor İçin Teknik Açıklamalar
-
-### Projenin Amacı
-
-Bu çalışma, büyük dil modellerinin (BDM) bilgi erişim sistemleriyle entegrasyonunu araştırmakta; kullanıcıların kendi yükledikleri belgeler üzerinden doğal dilde soru sorabildiği, kaynak gösterir şekilde cevap üretilen bir platform geliştirmeyi amaçlamaktadır.
-
-### RAG Mimarisi Açıklaması
-
-Retrieval-Augmented Generation (RAG), Lewis et al. (2020) tarafından önerilen bir mimaridir. İki ana bileşenden oluşur: **retriever** (ilgili bilgiyi bulan) ve **generator** (cevap üreten). Bu yapı, büyük dil modellerinin iki temel kısıtlamasını aşar: (1) eğitim kesme tarihi sonrasındaki bilgiye erişim yokluğu, (2) kapalı alan sorularında halüsinasyon üretme eğilimi.
-
-### Vektör Veritabanı Açıklaması
-
-ChromaDB, metin parçalarının anlamsal vektör temsillerini (embedding) saklayan ve kosinüs benzerliğine dayalı hızlı benzerlik araması yapan gömülü bir vektör veritabanıdır. Her vektörle birlikte metadata (dosya adı, sayfa numarası, chunk sırası) saklanarak kaynak gösterimi mümkün kılınmıştır.
-
-### Embedding Açıklaması
-
-Metin embedding'i, doğal dil metinlerini yüksek boyutlu vektör uzayında noktalara dönüştürme işlemidir. Anlamca yakın metinler bu uzayda birbirine yakın konumlanır. Bu çalışmada OpenAI'ın `text-embedding-3-small` modeli kullanılmış; 1536 boyutlu vektörler üretilmiştir.
-
-### Chunking Stratejisi
-
-Belgeler 800 karakter boyutunda, 150 karakter örtüşmeli (sliding window) parçalara ayrılmıştır. Örtüşme, parça sınırlarında kopan bağlamsal bilginin bir sonraki parçaya taşınmasını sağlar. Parça sınırları mümkün olduğunca cümle sonlarına (nokta, satır sonu) denk getirilmiştir.
-
-### LLM Cevap Üretim Süreci
-
-Retrieval aşamasında bulunan top-k chunk'lar, önceden tasarlanmış bir prompt template'e bağlam olarak eklenir. GPT-4o-mini, düşük temperature (0.3) değeriyle çağrılarak tutarlı ve olgusal cevaplar üretmesi sağlanır. "Sadece bağlamdan cevap ver" yönergesi, hallüsinasyon riskini minimize eder.
-
-### Test ve Değerlendirme
-
-Sistem, birim testleri (metin temizleme, chunking doğruluğu) ve entegrasyon testleri (uçtan uca yükleme-sorgulama-silme pipeline'ı) ile doğrulanmıştır. Manuel değerlendirmede belgede yer alan soruların büyük çoğunluğuna kaynaklı cevap üretilmiş; belgede bulunmayan sorularda sistem doğru şekilde "bulunamadı" yanıtı vermiştir.
-
-### Sonuç ve Gelecek Çalışmalar
-
-Bu çalışmada uygulanan RAG mimarisi, büyük dil modellerinin kapalı alan (closed-domain) sorularındaki güvenilirliğini önemli ölçüde artırmaktadır. Gelecek çalışmalarda re-ranking mekanizması, çok-dönüşümlü konuşma yönetimi ve yerel açık kaynak LLM entegrasyonu (Ollama/Llama-3) planlanmaktadır.
-
----
-
-*Bu proje [Öğrenci Adı] tarafından [Üniversite Adı] Bilgisayar Mühendisliği Bölümü bitirme projesi kapsamında geliştirilmiştir.*
+*Developed by [Emrullah Yıldız](https://github.com/YildizEmrullah) · Computer Engineering · Bachelor's Capstone Project*
