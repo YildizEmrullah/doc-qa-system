@@ -1,750 +1,468 @@
-/**
- * DocuAsk — Uygulama JavaScript
- * Vanilla JS ile soru-cevap arayüzü, doküman yönetimi ve API entegrasyonu.
- */
-
 'use strict';
 
-/* ══════════════════════════════════════════════════════════════
-   API İstek Yardımcısı
-   ══════════════════════════════════════════════════════════════ */
+/* ── API ─────────────────────────────────────────────────────── */
 const API = {
   BASE: '/api',
-
   async get(path) {
-    const res = await fetch(this.BASE + path);
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ detail: res.statusText }));
-      throw new Error(err.detail || 'Sunucu hatası');
-    }
-    return res.json();
+    const r = await fetch(this.BASE + path);
+    if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e.detail || 'Hata'); }
+    return r.json();
   },
-
   async post(path, body) {
-    const res = await fetch(this.BASE + path, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ detail: res.statusText }));
-      throw new Error(err.detail || 'Sunucu hatası');
-    }
-    return res.json();
+    const r = await fetch(this.BASE + path, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) });
+    if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e.detail || 'Hata'); }
+    return r.json();
   },
-
-  async upload(path, formData) {
-    const res = await fetch(this.BASE + path, { method: 'POST', body: formData });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ detail: res.statusText }));
-      throw new Error(err.detail || 'Yükleme hatası');
-    }
-    return res.json();
+  async upload(path, fd) {
+    const r = await fetch(this.BASE + path, { method:'POST', body:fd });
+    if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e.detail || 'Yükleme hatası'); }
+    return r.json();
   },
-
   async delete(path) {
-    const res = await fetch(this.BASE + path, { method: 'DELETE' });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ detail: res.statusText }));
-      throw new Error(err.detail || 'Silme hatası');
-    }
-    return res.json();
+    const r = await fetch(this.BASE + path, { method:'DELETE' });
+    if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e.detail || 'Silme hatası'); }
+    return r.json();
   },
 };
 
-/* ══════════════════════════════════════════════════════════════
-   Toast Bildirimleri
-   ══════════════════════════════════════════════════════════════ */
+/* ── Toast ───────────────────────────────────────────────────── */
 const Toast = {
-  container: null,
-
-  init() { this.container = document.getElementById('toastContainer'); },
-
-  show(message, type = 'info', duration = 3500) {
-    const icons = { success: '✓', error: '✕', info: 'ℹ', warning: '⚠' };
-    const toast = document.createElement('div');
-    toast.className = `toast ${type}`;
-    toast.innerHTML = `
-      <span class="toast-icon">${icons[type] || 'ℹ'}</span>
-      <span class="toast-msg">${message}</span>
-    `;
-    this.container.appendChild(toast);
-
-    setTimeout(() => {
-      toast.classList.add('hiding');
-      setTimeout(() => toast.remove(), 300);
-    }, duration);
+  show(msg, type='info', duration=3500) {
+    const icons = { success:'✓', error:'✕', info:'ℹ', warning:'⚠' };
+    const el = document.createElement('div');
+    el.className = `toast-item ${type}`;
+    el.innerHTML = `<span>${icons[type]}</span><span>${msg}</span>`;
+    document.getElementById('toastContainer').appendChild(el);
+    setTimeout(() => el.remove(), duration);
   },
-
-  success(msg) { this.show(msg, 'success'); },
-  error(msg)   { this.show(msg, 'error', 5000); },
-  info(msg)    { this.show(msg, 'info'); },
-  warning(msg) { this.show(msg, 'warning', 4500); },
+  success(m) { this.show(m,'success'); },
+  error(m)   { this.show(m,'error',5000); },
+  info(m)    { this.show(m,'info'); },
+  warning(m) { this.show(m,'warning',4000); },
 };
 
-/* ══════════════════════════════════════════════════════════════
-   Yükleme İlerleme Göstergesi
-   ══════════════════════════════════════════════════════════════ */
+/* ── Upload Progress ─────────────────────────────────────────── */
 const UploadProgress = {
-  steps: ['pStep1', 'pStep2', 'pStep3', 'pStep4'],
-  currentStep: 0,
+  steps: ['pStep1','pStep2','pStep3','pStep4'],
   timer: null,
 
   start(filename) {
-    this.currentStep = 0;
     clearInterval(this.timer);
-
-    const zone     = document.getElementById('uploadZone');
-    const progress = document.getElementById('uploadProgress');
-    const error    = document.getElementById('uploadError');
-
-    zone.style.display     = 'none';
-    progress.style.display = 'block';
-    error.style.display    = 'none';
-
-    document.getElementById('progressFilename').textContent =
-      filename.length > 28 ? filename.slice(0, 25) + '…' : filename;
+    document.getElementById('uploadZone').classList.add('d-none');
+    document.getElementById('uploadProgress').classList.remove('d-none');
+    document.getElementById('uploadError').classList.add('d-none');
+    document.getElementById('progressFilename').textContent = filename.length > 28 ? filename.slice(0,25)+'…' : filename;
     document.getElementById('progressBar').style.width = '0%';
-    document.getElementById('progressPct').textContent  = '0%';
-
-    // Adımları sıfırla
+    document.getElementById('progressPct').textContent = '0%';
     this.steps.forEach(id => {
-      const row = document.getElementById(id);
-      row.classList.remove('active', 'done');
-      row.querySelector('.step-dot').className = 'step-dot pending';
+      const el = document.getElementById(id);
+      el.className = 'step-row small text-muted';
+      el.querySelector('i').className = 'bi bi-circle me-1';
     });
-
-    // Adımları simüle et (gerçek işlem arka planda devam eder)
-    const durations = [15, 25, 50, 85];
+    const pcts = [15,40,75,90];
     let i = 0;
-
-    const advance = () => {
-      if (i >= this.steps.length) return;
-      this._activateStep(i);
-      const pct = durations[i];
-      document.getElementById('progressBar').style.width = pct + '%';
-      document.getElementById('progressPct').textContent  = pct + '%';
-      i++;
+    const go = () => {
+      if (i > 0) {
+        const prev = document.getElementById(this.steps[i-1]);
+        prev.className = 'step-row small done';
+        prev.querySelector('i').className = 'bi bi-check-circle-fill me-1';
+      }
+      if (i < this.steps.length) {
+        const cur = document.getElementById(this.steps[i]);
+        cur.className = 'step-row small active';
+        cur.querySelector('i').className = 'bi bi-arrow-right-circle-fill me-1';
+        document.getElementById('progressBar').style.width = pcts[i]+'%';
+        document.getElementById('progressPct').textContent = pcts[i]+'%';
+        i++;
+      }
     };
-
-    advance();
-    this.timer = setInterval(() => advance(), 800);
+    go();
+    this.timer = setInterval(go, 900);
   },
 
   complete() {
     clearInterval(this.timer);
-
-    // Tüm adımları tamamlandı olarak işaretle
     this.steps.forEach(id => {
-      const row = document.getElementById(id);
-      row.classList.remove('active');
-      row.classList.add('done');
-      row.querySelector('.step-dot').className = 'step-dot done';
+      const el = document.getElementById(id);
+      el.className = 'step-row small done';
+      el.querySelector('i').className = 'bi bi-check-circle-fill me-1';
     });
-
     document.getElementById('progressBar').style.width = '100%';
-    document.getElementById('progressPct').textContent  = '100%';
-
-    setTimeout(() => this.reset(), 1800);
+    document.getElementById('progressPct').textContent = '100%';
+    setTimeout(() => this.reset(), 1500);
   },
 
-  error(message) {
+  error(msg) {
     clearInterval(this.timer);
     this.reset();
-
-    const errEl = document.getElementById('uploadError');
-    errEl.textContent    = '⚠ ' + message;
-    errEl.style.display  = 'block';
-
-    setTimeout(() => { errEl.style.display = 'none'; }, 5000);
+    const e = document.getElementById('uploadError');
+    e.textContent = '⚠ ' + msg;
+    e.classList.remove('d-none');
+    setTimeout(() => e.classList.add('d-none'), 5000);
   },
 
   reset() {
-    document.getElementById('uploadZone').style.display     = '';
-    document.getElementById('uploadProgress').style.display = 'none';
-    document.getElementById('fileInput').value              = '';
-  },
-
-  _activateStep(index) {
-    if (index > 0) {
-      const prev = document.getElementById(this.steps[index - 1]);
-      prev.classList.remove('active');
-      prev.classList.add('done');
-      prev.querySelector('.step-dot').className = 'step-dot done';
-    }
-    const curr = document.getElementById(this.steps[index]);
-    curr.classList.add('active');
-    curr.querySelector('.step-dot').className = 'step-dot active';
+    document.getElementById('uploadZone').classList.remove('d-none');
+    document.getElementById('uploadProgress').classList.add('d-none');
+    document.getElementById('fileInput').value = '';
   },
 };
 
-/* ══════════════════════════════════════════════════════════════
-   Ana Uygulama Sınıfı
-   ══════════════════════════════════════════════════════════════ */
+/* ── Ana Uygulama ────────────────────────────────────────────── */
 class DocuAskApp {
   constructor() {
-    this.documents       = [];
-    this.activeDocId     = null;   // null = tüm dokümanlarda ara
-    this.questionHistory = [];
-    this.isAsking        = false;
+    this.documents   = [];
+    this.activeDocId = null;
+    this.isAsking    = false;
 
-    this._initComponents();
-    this._bindEvents();
-    this._loadInitialData();
+    this._bind();
+    this._load();
   }
 
-  /* ─── Başlatma ──────────────────────────────────────────────── */
+  _bind() {
+    // Upload
+    document.getElementById('uploadZone').addEventListener('click', () => document.getElementById('fileInput').click());
+    document.getElementById('fileInput').addEventListener('change', e => { if(e.target.files[0]) this._upload(e.target.files[0]); });
+    const zone = document.getElementById('uploadZone');
+    zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag-over'); });
+    zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+    zone.addEventListener('drop', e => { e.preventDefault(); zone.classList.remove('drag-over'); if(e.dataTransfer.files[0]) this._upload(e.dataTransfer.files[0]); });
 
-  _initComponents() {
-    Toast.init();
+    // Soru
+    document.getElementById('sendBtn').addEventListener('click', () => this._ask());
+    document.getElementById('questionInput').addEventListener('keydown', e => { if(e.key==='Enter' && !e.shiftKey) { e.preventDefault(); this._ask(); } });
+    document.getElementById('questionInput').addEventListener('input', () => {
+      const len = document.getElementById('questionInput').value.length;
+      document.getElementById('charCount').textContent = len+' / 1000';
+      this._resizeTextarea();
+    });
 
-    this.els = {
-      fileInput:       document.getElementById('fileInput'),
-      uploadZone:      document.getElementById('uploadZone'),
-      documentList:    document.getElementById('documentList'),
-      docEmpty:        document.getElementById('docEmpty'),
-      docCountBadge:   document.getElementById('docCountBadge'),
-      messages:        document.getElementById('messages'),
-      welcomeScreen:   document.getElementById('welcomeScreen'),
-      questionInput:   document.getElementById('questionInput'),
-      sendBtn:         document.getElementById('sendBtn'),
-      charCount:       document.getElementById('charCount'),
-      chatArea:        document.getElementById('chatArea'),
-      activeDocPill:   document.getElementById('activeDocPill'),
-      activeDocName:   document.getElementById('activeDocName'),
-      clearDocFilter:  document.getElementById('clearDocFilter'),
-      clearChatBtn:    document.getElementById('clearChatBtn'),
-      statusDot:       document.getElementById('statusDot'),
-      statusText:      document.getElementById('statusText'),
-      sidebarToggle:   document.getElementById('sidebarToggle'),
-      sidebar:         document.getElementById('sidebar'),
-      // İstatistikler
-      scDocs:    document.getElementById('scDocs'),
-      scChunks:  document.getElementById('scChunks'),
-      scModel:   document.getElementById('scModel'),
-      scLlm:     document.getElementById('scLlm'),
-      statChunks: document.getElementById('statChunks'),
-      statModel:  document.getElementById('statModel'),
-    };
+    // Filtre temizle
+    document.getElementById('clearDocFilter').addEventListener('click', () => this._setActive(null));
+
+    // Sohbet temizle
+    document.getElementById('clearChatBtn').addEventListener('click', () => this._clearChat());
   }
 
-  _bindEvents() {
-    // Sidebar toggle
-    this.els.sidebarToggle.addEventListener('click', () => this._toggleSidebar());
-
-    // Dosya yükleme — tıkla
-    this.els.uploadZone.addEventListener('click', () => this.els.fileInput.click());
-    this.els.fileInput.addEventListener('change', e => {
-      if (e.target.files[0]) this._handleFileUpload(e.target.files[0]);
-    });
-
-    // Drag & Drop
-    this.els.uploadZone.addEventListener('dragover',  e => { e.preventDefault(); this.els.uploadZone.classList.add('drag-over'); });
-    this.els.uploadZone.addEventListener('dragleave', () => this.els.uploadZone.classList.remove('drag-over'));
-    this.els.uploadZone.addEventListener('drop',      e => {
-      e.preventDefault();
-      this.els.uploadZone.classList.remove('drag-over');
-      const file = e.dataTransfer.files[0];
-      if (file) this._handleFileUpload(file);
-    });
-
-    // Soru gönderme
-    this.els.sendBtn.addEventListener('click',    () => this._submitQuestion());
-    this.els.questionInput.addEventListener('keydown', e => {
-      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); this._submitQuestion(); }
-    });
-
-    // Karakter sayacı & otomatik yükseklik
-    this.els.questionInput.addEventListener('input', () => {
-      const len = this.els.questionInput.value.length;
-      this.els.charCount.textContent = `${len} / 1000`;
-      this._autoResizeTextarea();
-    });
-
-    // Aktif doküman filtresini temizle
-    this.els.clearDocFilter.addEventListener('click', () => this._setActiveDocument(null));
-
-    // Sohbeti temizle
-    this.els.clearChatBtn.addEventListener('click', () => this._clearChat());
-  }
-
-  async _loadInitialData() {
-    await Promise.all([this._loadDocuments(), this._loadStats()]);
+  async _load() {
+    await Promise.all([this._loadDocs(), this._loadStats()]);
     this._checkHealth();
   }
 
-  /* ─── Sağlık Kontrolü ───────────────────────────────────────── */
-
   async _checkHealth() {
     try {
-      const data = await API.get('/health');
-      if (data.groq_configured) {
-        this.els.statusDot.className    = 'status-dot online';
-        this.els.statusText.textContent = 'Groq / Llama-3.3 Bağlı';
-      } else if (data.openai_configured) {
-        this.els.statusDot.className    = 'status-dot online';
-        this.els.statusText.textContent = 'OpenAI Bağlı';
+      const d = await API.get('/health');
+      const badge = document.getElementById('statusBadge');
+      if (d.groq_configured) {
+        badge.className = 'badge bg-success';
+        badge.textContent = 'Groq / Llama-3.3 Bağlı';
+      } else if (d.openai_configured) {
+        badge.className = 'badge bg-success';
+        badge.textContent = 'OpenAI Bağlı';
       } else {
-        this.els.statusDot.className    = 'status-dot warning';
-        this.els.statusText.textContent = 'Demo Modu (API Key Yok)';
-        Toast.warning('LLM API anahtarı bulunamadı — Demo modunda çalışılıyor.');
+        badge.className = 'badge bg-warning text-dark';
+        badge.textContent = 'Demo Modu';
       }
     } catch {
-      this.els.statusDot.className  = 'status-dot error';
-      this.els.statusText.textContent = 'Bağlantı Hatası';
+      document.getElementById('statusBadge').className = 'badge bg-danger';
+      document.getElementById('statusBadge').textContent = 'Bağlantı Hatası';
     }
   }
 
-  /* ─── Doküman Yönetimi ──────────────────────────────────────── */
-
-  async _loadDocuments() {
+  async _loadDocs() {
     try {
-      const data = await API.get('/documents');
-      this.documents = data.documents;
-      this._renderDocumentList();
-    } catch {
-      // Sessizce geç; health check hatayı gösterir
-    }
+      const d = await API.get('/documents');
+      this.documents = d.documents;
+      this._renderDocs();
+    } catch {}
   }
 
   async _loadStats() {
     try {
       const s = await API.get('/documents/stats');
-      this._animateCount(this.els.scDocs,   s.total_documents);
-      this._animateCount(this.els.scChunks, s.total_chunks);
-      this.els.scModel.textContent    = this._shortModel(s.embedding_model);
-      this.els.scLlm.textContent      = s.openai_configured ? s.llm_model : 'Demo';
-      this.els.statChunks.textContent = s.total_chunks;
-      this.els.statModel.textContent  = this._shortModel(s.embedding_model);
-    } catch { /* ignore */ }
+      document.getElementById('scDocs').textContent   = s.total_documents;
+      document.getElementById('scChunks').textContent = s.total_chunks;
+      document.getElementById('scModel').textContent  = this._shortModel(s.embedding_model);
+      document.getElementById('scLlm').textContent    = s.openai_configured ? s.llm_model : 'Demo';
+    } catch {}
   }
 
-  _animateCount(el, target, duration = 600) {
-    const start = parseInt(el.textContent) || 0;
-    if (start === target) return;
-    const step  = (target - start) / (duration / 16);
-    let   cur   = start;
-    const tick  = () => {
-      cur += step;
-      if ((step > 0 && cur >= target) || (step < 0 && cur <= target)) {
-        el.textContent = target;
-      } else {
-        el.textContent = Math.round(cur);
-        requestAnimationFrame(tick);
-      }
-    };
-    requestAnimationFrame(tick);
+  _shortModel(name='') {
+    const p = name.split('/');
+    return p[p.length-1].slice(0,18);
   }
 
-  _shortModel(name = '') {
-    if (name.length <= 14) return name;
-    const parts = name.split('/');
-    return parts[parts.length - 1];
-  }
+  _renderDocs() {
+    const list = document.getElementById('documentList');
+    document.getElementById('docCountBadge').textContent = this.documents.length;
 
-  _renderDocumentList() {
-    const list  = this.els.documentList;
-    const count = this.documents.length;
-
-    this.els.docCountBadge.textContent = count;
-
-    if (count === 0) {
-      list.innerHTML = '';
-      list.appendChild(this.els.docEmpty);
+    if (!this.documents.length) {
+      list.innerHTML = `<div id="docEmpty" class="text-center text-muted py-4 small"><i class="bi bi-inbox fs-3 d-block mb-1"></i>Henüz doküman yüklenmedi</div>`;
       return;
     }
 
-    list.innerHTML = '';
-    this.documents.forEach(doc => {
-      const ext   = doc.file_type || 'txt';
-      const isAct = doc.id === this.activeDocId;
-      const item  = document.createElement('div');
-      item.className = `doc-item${isAct ? ' active' : ''}`;
-      item.dataset.id = doc.id;
-
-      item.innerHTML = `
-        <div class="doc-item-icon ${ext}">${ext.toUpperCase()}</div>
-        <div class="doc-item-info">
+    list.innerHTML = this.documents.map(doc => `
+      <div class="doc-item ${doc.id===this.activeDocId?'active':''}" data-id="${doc.id}">
+        <span class="badge ${doc.file_type==='pdf'?'bg-danger':'bg-primary'} bg-opacity-75">${doc.file_type.toUpperCase()}</span>
+        <div class="overflow-hidden">
           <div class="doc-item-name" title="${doc.original_name}">${doc.original_name}</div>
           <div class="doc-item-meta">${doc.chunk_count} chunk · ${doc.page_count} sayfa</div>
         </div>
-        <button class="doc-item-delete" title="Dokümanı sil" data-id="${doc.id}">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-            <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
-            <path d="M10 11v6"/><path d="M14 11v6"/>
-          </svg>
-        </button>
-      `;
+        <button class="doc-delete-btn" data-id="${doc.id}" title="Sil"><i class="bi bi-trash"></i></button>
+      </div>
+    `).join('');
 
-      // Dokümana tıkla → filtre seç
-      item.addEventListener('click', e => {
-        if (e.target.closest('.doc-item-delete')) return;
-        this._setActiveDocument(isAct ? null : doc.id, doc.original_name);
+    list.querySelectorAll('.doc-item').forEach(el => {
+      el.addEventListener('click', e => {
+        if (e.target.closest('.doc-delete-btn')) return;
+        const id = el.dataset.id;
+        const doc = this.documents.find(d => d.id===id);
+        this._setActive(id===this.activeDocId ? null : id, doc?.original_name);
       });
+    });
 
-      // Sil düğmesi
-      item.querySelector('.doc-item-delete').addEventListener('click', e => {
+    list.querySelectorAll('.doc-delete-btn').forEach(btn => {
+      btn.addEventListener('click', e => {
         e.stopPropagation();
-        this._deleteDocument(doc.id, doc.original_name);
+        const id = btn.dataset.id;
+        const doc = this.documents.find(d => d.id===id);
+        this._deletedoc(id, doc?.original_name);
       });
-
-      list.appendChild(item);
     });
   }
 
-  _setActiveDocument(docId, docName = 'tüm dokümanlar') {
-    this.activeDocId = docId;
-    this._renderDocumentList();
-
-    if (docId) {
-      this.els.activeDocPill.style.display = 'flex';
-      this.els.activeDocName.textContent   = docName;
-      this.els.questionInput.placeholder   = `"${docName}" hakkında soru sorun...`;
+  _setActive(id, name='') {
+    this.activeDocId = id;
+    this._renderDocs();
+    const pill = document.getElementById('activeDocPill');
+    const noFilter = document.getElementById('noFilterMsg');
+    if (id) {
+      pill.classList.replace('d-none','d-flex');
+      noFilter.classList.add('d-none');
+      document.getElementById('activeDocName').textContent = name;
+      document.getElementById('questionInput').placeholder = `"${name}" hakkında soru yazın...`;
     } else {
-      this.els.activeDocPill.style.display = 'none';
-      this.els.questionInput.placeholder   = 'Doküman hakkında bir soru yazın...';
+      pill.classList.replace('d-flex','d-none');
+      noFilter.classList.remove('d-none');
+      document.getElementById('questionInput').placeholder = 'Doküman hakkında soru yazın...';
     }
   }
 
-  async _deleteDocument(docId, docName) {
-    if (!confirm(`"${docName}" dokümanını silmek istediğinize emin misiniz?`)) return;
+  async _deletedoc(id, name) {
+    if (!confirm(`"${name}" silinsin mi?`)) return;
     try {
-      await API.delete(`/documents/${docId}`);
-      Toast.success(`"${docName}" silindi.`);
-
-      if (this.activeDocId === docId) this._setActiveDocument(null);
-
-      await Promise.all([this._loadDocuments(), this._loadStats()]);
-    } catch (err) {
-      Toast.error('Silme hatası: ' + err.message);
-    }
+      await API.delete('/documents/'+id);
+      Toast.success(`"${name}" silindi.`);
+      if (this.activeDocId===id) this._setActive(null);
+      await Promise.all([this._loadDocs(), this._loadStats()]);
+    } catch(e) { Toast.error(e.message); }
   }
 
-  /* ─── Dosya Yükleme ─────────────────────────────────────────── */
-
-  async _handleFileUpload(file) {
-    const ext = '.' + file.name.split('.').pop().toLowerCase();
-
-    if (!['.pdf', '.txt'].includes(ext)) {
-      UploadProgress.error(`Desteklenmeyen format: "${ext}". Lütfen PDF veya TXT yükleyin.`);
-      Toast.error('Desteklenmeyen dosya türü.');
-      return;
-    }
-
-    if (file.size > 50 * 1024 * 1024) {
-      UploadProgress.error('Dosya 50 MB sınırını aşıyor.');
-      Toast.error('Dosya çok büyük (maks. 50 MB).');
-      return;
-    }
+  async _upload(file) {
+    const ext = '.'+file.name.split('.').pop().toLowerCase();
+    if (!['.pdf','.txt'].includes(ext)) { Toast.error('Sadece PDF veya TXT yükleyin.'); return; }
+    if (file.size > 50*1024*1024) { Toast.error('Dosya 50 MB sınırını aşıyor.'); return; }
 
     UploadProgress.start(file.name);
-
-    const formData = new FormData();
-    formData.append('file', file);
-
+    const fd = new FormData();
+    fd.append('file', file);
     try {
-      const result = await API.upload('/upload', formData);
+      const r = await API.upload('/upload', fd);
       UploadProgress.complete();
-      Toast.success(`"${file.name}" yüklendi — ${result.chunk_count} chunk oluşturuldu.`);
-      await Promise.all([this._loadDocuments(), this._loadStats()]);
-    } catch (err) {
-      UploadProgress.error(err.message);
-      Toast.error('Yükleme hatası: ' + err.message);
+      Toast.success(`"${file.name}" yüklendi — ${r.chunk_count} chunk.`);
+      await Promise.all([this._loadDocs(), this._loadStats()]);
+    } catch(e) {
+      UploadProgress.error(e.message);
+      Toast.error('Yükleme: '+e.message);
     }
   }
 
-  /* ─── Soru-Cevap ────────────────────────────────────────────── */
-
-  async _submitQuestion() {
-    const question = this.els.questionInput.value.trim();
-
-    if (!question) {
-      Toast.warning('Lütfen bir soru yazın.');
-      this.els.questionInput.focus();
-      return;
-    }
-
-    if (question.length < 3) {
-      Toast.warning('Soru en az 3 karakter olmalıdır.');
-      return;
-    }
-
+  async _ask() {
+    const q = document.getElementById('questionInput').value.trim();
+    if (!q || q.length < 3) { Toast.warning('Lütfen en az 3 karakterlik bir soru yazın.'); return; }
     if (this.isAsking) return;
     this.isAsking = true;
 
-    // Hoşgeldin ekranını gizle
-    this.els.welcomeScreen.style.display = 'none';
+    document.getElementById('welcomeScreen').style.display = 'none';
+    this._addUserMsg(q);
+    document.getElementById('questionInput').value = '';
+    document.getElementById('charCount').textContent = '0 / 1000';
+    this._resizeTextarea();
+    document.getElementById('sendBtn').disabled = true;
+    document.getElementById('questionInput').disabled = true;
 
-    // Kullanıcı balonunu ekle
-    this._appendUserMessage(question);
-
-    // Input'u temizle ve devre dışı bırak
-    this.els.questionInput.value  = '';
-    this.els.charCount.textContent = '0 / 1000';
-    this._autoResizeTextarea();
-    this._setSendState(false);
-
-    // Yazıyor göstergesi
-    const typingEl = this._appendTypingIndicator();
-
+    const typing = this._addTyping();
     try {
-      const result = await API.post('/ask', {
-        question,
-        document_id: this.activeDocId || undefined,
-        top_k: 5,
-      });
-
-      typingEl.remove();
-      this._appendAIMessage(result, question);
-
-      // Geçmişe ekle
-      this.questionHistory.push({ question, answer: result.answer, ts: new Date() });
-    } catch (err) {
-      typingEl.remove();
-      this._appendErrorMessage(err.message);
-      Toast.error(err.message);
+      const r = await API.post('/ask', { question:q, document_id:this.activeDocId||undefined, top_k:5 });
+      typing.remove();
+      this._addAIMsg(r, q);
+    } catch(e) {
+      typing.remove();
+      this._addErrorMsg(e.message);
+      Toast.error(e.message);
     } finally {
       this.isAsking = false;
-      this._setSendState(true);
-      this._scrollToBottom();
-      this.els.questionInput.focus();
+      document.getElementById('sendBtn').disabled = false;
+      document.getElementById('questionInput').disabled = false;
+      this._scroll();
+      document.getElementById('questionInput').focus();
+      document.getElementById('clearChatBtn').classList.remove('d-none');
     }
   }
 
-  /* ─── Mesaj Render Fonksiyonları ────────────────────────────── */
-
-  _appendUserMessage(text) {
+  _addUserMsg(text) {
     const div = document.createElement('div');
     div.className = 'msg-user';
-    div.innerHTML = `<div class="msg-user-bubble">${this._escHtml(text)}</div>`;
-    this.els.messages.appendChild(div);
-    this.els.clearChatBtn.style.display = 'flex';
-    this._scrollToBottom();
+    div.innerHTML = `<div class="msg-user-bubble">${this._esc(text)}</div>`;
+    document.getElementById('messages').appendChild(div);
+    document.getElementById('clearChatBtn').classList.remove('d-none');
+    this._scroll();
   }
 
-  _appendTypingIndicator() {
-    const wrap = document.createElement('div');
-    wrap.className = 'msg-ai';
-    wrap.innerHTML = `
-      <div class="msg-ai-header">
-        <div class="ai-avatar">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-          </svg>
-        </div>
-        <span class="msg-ai-label">DocuAsk</span>
-      </div>
-      <div class="typing-indicator">
-        <div class="typing-dots">
-          <div class="typing-dot"></div>
-          <div class="typing-dot"></div>
-          <div class="typing-dot"></div>
-        </div>
-        <span class="typing-text">Yanıtlanıyor...</span>
-      </div>
-    `;
-    this.els.messages.appendChild(wrap);
-    this._scrollToBottom();
-    return wrap;
-  }
-
-  _appendAIMessage(result, question) {
-    const isDemo = result.answer.startsWith('⚠️');
-    const time   = new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
-
-    const wrap = document.createElement('div');
-    wrap.className = 'msg-ai';
-
-    const demoBadge = isDemo
-      ? `<div class="demo-badge">⚠ Demo Modu — LLM API anahtarı gerekli</div>`
-      : '';
-
-    // Markdown rendering
-    const mdHtml = (typeof marked !== 'undefined')
-      ? marked.parse(result.answer)
-      : this._escHtml(result.answer);
-
-    wrap.innerHTML = `
-      <div class="msg-ai-header">
-        <div class="ai-avatar">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-          </svg>
-        </div>
-        <span class="msg-ai-label">DocuAsk</span>
-        <span class="msg-ai-time">${time} &nbsp;·&nbsp; ${result.processing_time_ms}ms</span>
-      </div>
-      ${demoBadge}
-      <div class="msg-ai-bubble">${mdHtml}</div>
-      <div class="msg-ai-actions">
-        <button class="copy-btn" title="Cevabı kopyala">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-            <rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
-          </svg>
-          Kopyala
-        </button>
-      </div>
-    `;
-
-    // Kaynaklar (varsa)
-    if (result.sources?.length) {
-      const sourcesEl = this._buildSourcesEl(result.sources, question);
-      wrap.appendChild(sourcesEl);
-    }
-
-    // Kopyala butonu
-    wrap.querySelector('.copy-btn').addEventListener('click', (e) => {
-      this._copyToClipboard(result.answer, e.currentTarget);
-    });
-
-    this.els.messages.appendChild(wrap);
-    this.els.clearChatBtn.style.display = 'flex';
-    this._scrollToBottom();
-  }
-
-  _buildSourcesEl(sources, question) {
-    const section = document.createElement('div');
-    section.className = 'sources-section';
-
-    const cards = sources.map(src => {
-      const score   = Math.round(src.similarity_score * 100);
-      const preview = this._highlightTerms(src.text.slice(0, 280), question);
-      return `
-        <div class="source-card">
-          <div class="source-card-header">
-            <span class="source-badge file">📄 ${this._escHtml(src.filename)}</span>
-            <span class="source-badge page">Sayfa ${src.page_number}</span>
-            <span class="source-badge score">%${score} eşleşme</span>
-          </div>
-          <div class="source-text">${preview}${src.text.length > 280 ? '…' : ''}</div>
-        </div>`;
-    }).join('');
-
-    section.innerHTML = `
-      <button class="sources-toggle-btn">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-          <polyline points="14 2 14 8 20 8"/>
-        </svg>
-        ${sources.length} Kaynak
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-          <polyline points="6 9 12 15 18 9"/>
-        </svg>
-      </button>
-      <div class="sources-body">${cards}</div>
-    `;
-
-    section.querySelector('.sources-toggle-btn').addEventListener('click', (e) => {
-      const btn  = e.currentTarget;
-      const body = section.querySelector('.sources-body');
-      btn.classList.toggle('open');
-      body.classList.toggle('open');
-    });
-
-    return section;
-  }
-
-  _appendErrorMessage(message) {
+  _addTyping() {
     const div = document.createElement('div');
     div.className = 'msg-ai';
     div.innerHTML = `
       <div class="msg-ai-header">
-        <div class="ai-avatar" style="background:#fee2e2;color:#ef4444;">✕</div>
-        <span class="msg-ai-label" style="color:#ef4444;">Hata</span>
+        <div class="ai-avatar"><i class="bi bi-robot"></i></div>
+        <span class="msg-ai-label">DocuAsk</span>
       </div>
-      <div class="msg-ai-bubble" style="border-left:3px solid #ef4444;color:#991b1b;">
-        ${this._escHtml(message)}
+      <div class="typing-indicator">
+        <div class="typing-dots">
+          <div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div>
+        </div>
+        <span class="text-muted small">Yanıtlanıyor...</span>
+      </div>`;
+    document.getElementById('messages').appendChild(div);
+    this._scroll();
+    return div;
+  }
+
+  _addAIMsg(result, question) {
+    const time = new Date().toLocaleTimeString('tr-TR',{hour:'2-digit',minute:'2-digit'});
+    const md   = typeof marked !== 'undefined' ? marked.parse(result.answer) : this._esc(result.answer);
+
+    const div = document.createElement('div');
+    div.className = 'msg-ai';
+    div.innerHTML = `
+      <div class="msg-ai-header">
+        <div class="ai-avatar"><i class="bi bi-robot"></i></div>
+        <span class="msg-ai-label">DocuAsk</span>
+        <span class="msg-ai-time">${time} · ${result.processing_time_ms}ms</span>
       </div>
-    `;
-    this.els.messages.appendChild(div);
+      <div class="msg-ai-bubble">${md}</div>
+      <div class="msg-ai-actions">
+        <button class="copy-btn"><i class="bi bi-clipboard me-1"></i>Kopyala</button>
+      </div>`;
+
+    if (result.sources?.length) {
+      div.appendChild(this._buildSources(result.sources, question));
+    }
+
+    div.querySelector('.copy-btn').addEventListener('click', e => this._copy(result.answer, e.currentTarget));
+    document.getElementById('messages').appendChild(div);
+    this._scroll();
   }
 
-  /* ─── Yardımcı Metodlar ─────────────────────────────────────── */
+  _buildSources(sources, question) {
+    const wrap = document.createElement('div');
+    wrap.className = 'mt-2';
 
-  _setSendState(enabled) {
-    this.els.sendBtn.disabled         = !enabled;
-    this.els.questionInput.disabled   = !enabled;
-  }
+    const cards = sources.map(s => {
+      const score   = Math.round(s.similarity_score * 100);
+      const preview = this._highlight(s.text.slice(0,280), question);
+      return `
+        <div class="source-card">
+          <div class="d-flex gap-2 flex-wrap mb-1">
+            <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25">📄 ${this._esc(s.filename)}</span>
+            <span class="badge bg-secondary bg-opacity-10 text-secondary">Sayfa ${s.page_number}</span>
+            <span class="badge bg-success bg-opacity-10 text-success">%${score} eşleşme</span>
+          </div>
+          <div class="source-text">${preview}${s.text.length>280?'…':''}</div>
+        </div>`;
+    }).join('');
 
-  _scrollToBottom() {
-    setTimeout(() => {
-      this.els.chatArea.scrollTop = this.els.chatArea.scrollHeight;
-    }, 50);
-  }
+    wrap.innerHTML = `
+      <button class="sources-toggle-btn">
+        <i class="bi bi-journal-text"></i> ${sources.length} Kaynak
+        <i class="bi bi-chevron-down ms-1"></i>
+      </button>
+      <div class="sources-body">${cards}</div>`;
 
-  _autoResizeTextarea() {
-    const ta = this.els.questionInput;
-    ta.style.height = 'auto';
-    ta.style.height = Math.min(ta.scrollHeight, 160) + 'px';
-  }
-
-  _toggleSidebar() {
-    this.els.sidebar.classList.toggle('collapsed');
-  }
-
-  _escHtml(str = '') {
-    return str
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/\n/g, '<br>');
-  }
-
-  _highlightTerms(text, query = '') {
-    let safe = this._escHtml(text);
-    const terms = query.split(/\s+/).filter(t => t.length > 2);
-    terms.forEach(term => {
-      const re = new RegExp(`(${term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
-      safe = safe.replace(re, '<mark>$1</mark>');
+    wrap.querySelector('.sources-toggle-btn').addEventListener('click', e => {
+      const btn  = e.currentTarget;
+      const body = wrap.querySelector('.sources-body');
+      body.classList.toggle('open');
+      btn.querySelector('.bi-chevron-down,.bi-chevron-up').classList.toggle('bi-chevron-down');
+      btn.querySelector('.bi-chevron-down,.bi-chevron-up').classList.toggle('bi-chevron-up');
     });
-    return safe;
+
+    return wrap;
   }
 
-  _copyToClipboard(text, btn) {
+  _addErrorMsg(msg) {
+    const div = document.createElement('div');
+    div.className = 'msg-ai';
+    div.innerHTML = `
+      <div class="msg-ai-header">
+        <div class="ai-avatar bg-danger-subtle"><i class="bi bi-exclamation-triangle text-danger"></i></div>
+        <span class="msg-ai-label text-danger">Hata</span>
+      </div>
+      <div class="alert alert-danger py-2 mb-0">${this._esc(msg)}</div>`;
+    document.getElementById('messages').appendChild(div);
+  }
+
+  _copy(text, btn) {
     navigator.clipboard.writeText(text).then(() => {
       btn.classList.add('copied');
-      btn.innerHTML = `
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-          <polyline points="20 6 9 17 4 12"/>
-        </svg>
-        Kopyalandı!`;
+      btn.innerHTML = '<i class="bi bi-check-lg me-1"></i>Kopyalandı!';
       setTimeout(() => {
         btn.classList.remove('copied');
-        btn.innerHTML = `
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-            <rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
-          </svg>
-          Kopyala`;
+        btn.innerHTML = '<i class="bi bi-clipboard me-1"></i>Kopyala';
       }, 2000);
     }).catch(() => Toast.error('Kopyalama başarısız.'));
   }
 
   _clearChat() {
-    this.els.messages.innerHTML = '';
-    this.questionHistory = [];
-    this.els.welcomeScreen.style.display = '';
-    this.els.clearChatBtn.style.display  = 'none';
+    document.getElementById('messages').innerHTML = '';
+    document.getElementById('welcomeScreen').style.display = '';
+    document.getElementById('clearChatBtn').classList.add('d-none');
     Toast.info('Sohbet temizlendi.');
   }
 
-  /** Dışarıdan örnek sorular için çağrılabilir (welcome-screen butonları) */
+  _scroll() { setTimeout(() => { const c = document.getElementById('chatArea'); c.scrollTop = c.scrollHeight; }, 50); }
+
+  _resizeTextarea() {
+    const ta = document.getElementById('questionInput');
+    ta.style.height = 'auto';
+    ta.style.height = Math.min(ta.scrollHeight, 120)+'px';
+  }
+
+  _esc(s='') {
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
+  }
+
+  _highlight(text, query='') {
+    let safe = this._esc(text);
+    query.split(/\s+/).filter(t=>t.length>2).forEach(term => {
+      safe = safe.replace(new RegExp(`(${term.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')})`, 'gi'), '<mark>$1</mark>');
+    });
+    return safe;
+  }
+
   setQuestion(text) {
-    this.els.questionInput.value = text;
-    this.els.charCount.textContent = `${text.length} / 1000`;
-    this._autoResizeTextarea();
-    this.els.questionInput.focus();
+    document.getElementById('questionInput').value = text;
+    document.getElementById('charCount').textContent = text.length+' / 1000';
+    this._resizeTextarea();
+    document.getElementById('questionInput').focus();
   }
 }
 
-/* ══════════════════════════════════════════════════════════════
-   Uygulama Başlatma
-   ══════════════════════════════════════════════════════════════ */
+/* ── Marked config ───────────────────────────────────────────── */
 if (typeof marked !== 'undefined') {
-  marked.setOptions({ breaks: true, gfm: true });
+  marked.setOptions({ breaks:true, gfm:true });
 }
 
+/* ── Başlat ──────────────────────────────────────────────────── */
 let app;
-document.addEventListener('DOMContentLoaded', () => {
-  app = new DocuAskApp();
-});
+document.addEventListener('DOMContentLoaded', () => { app = new DocuAskApp(); });

@@ -3,391 +3,221 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>DocuAsk — Doküman Tabanlı Akıllı Soru-Cevap Sistemi</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/static/css/style.css" />
+  <title>DocuAsk — Doküman Soru Cevap Sistemi</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet"/>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet"/>
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <link rel="stylesheet" href="/static/css/style.css" />
 </head>
-<body>
+<body class="bg-light">
 
-  <!-- ═══════════════════════════════════════════════════════════ -->
-  <!--  SIDEBAR — Doküman Yönetimi                                -->
-  <!-- ═══════════════════════════════════════════════════════════ -->
-  <aside class="sidebar" id="sidebar">
+<!-- NAVBAR -->
+<nav class="navbar navbar-dark bg-primary px-3 py-2">
+  <div class="d-flex align-items-center gap-2">
+    <i class="bi bi-file-earmark-text-fill fs-5 text-white"></i>
+    <span class="navbar-brand mb-0 fw-bold">DocuAsk</span>
+    <span class="badge bg-light text-primary">Bitirme Projesi</span>
+  </div>
+  <div class="d-flex align-items-center gap-2">
+    <span class="badge bg-success" id="statusBadge">Bağlanıyor...</span>
+    <a href="/api/docs" target="_blank" class="btn btn-outline-light btn-sm">API Docs</a>
+  </div>
+</nav>
 
-    <!-- Logo -->
-    <div class="sidebar-logo">
-      <div class="logo-icon">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-          <polyline points="14 2 14 8 20 8"/>
-          <line x1="16" y1="13" x2="8" y2="13"/>
-          <line x1="16" y1="17" x2="8" y2="17"/>
-          <polyline points="10 9 9 9 8 9"/>
-        </svg>
-      </div>
-      <div class="logo-text">
-        <span class="logo-title">DocuAsk</span>
-        <span class="logo-sub">RAG · Soru-Cevap</span>
-      </div>
-    </div>
+<div class="container-fluid" style="height:calc(100vh - 56px);">
+<div class="row h-100">
 
-    <!-- Sistem Durumu -->
-    <div class="sidebar-status">
-      <div class="status-dot" id="statusDot"></div>
-      <span class="status-text" id="statusText">Bağlanıyor...</span>
-    </div>
+  <!-- SOL PANEL -->
+  <div class="col-md-3 border-end bg-white p-3 d-flex flex-column" style="overflow-y:auto;">
 
-    <!-- ─── Yükleme Alanı ─── -->
-    <div class="sidebar-section">
-      <div class="section-label">Doküman Yükle</div>
-
-      <div class="upload-zone" id="uploadZone">
-        <input type="file" id="fileInput" accept=".pdf,.txt" hidden />
-        <div class="upload-icon-wrap">
-          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-            <polyline points="17 8 12 3 7 8"/>
-            <line x1="12" y1="3" x2="12" y2="15"/>
-          </svg>
-        </div>
-        <p class="upload-label">Dosyayı sürükleyin veya tıklayın</p>
-        <p class="upload-hint">PDF · TXT · Maks 50 MB</p>
-      </div>
-
-      <!-- Yükleme İlerleme Göstergesi -->
-      <div class="upload-progress" id="uploadProgress" style="display:none;">
-        <div class="progress-header">
-          <span class="progress-filename" id="progressFilename">dosya.pdf</span>
-          <span class="progress-pct" id="progressPct">0%</span>
-        </div>
-        <div class="progress-bar-wrap">
-          <div class="progress-bar" id="progressBar" style="width:0%"></div>
-        </div>
-        <div class="progress-steps">
-          <div class="progress-step" id="pStep1">
-            <span class="step-dot pending"></span>
-            <span>Metin çıkarılıyor</span>
-          </div>
-          <div class="progress-step" id="pStep2">
-            <span class="step-dot pending"></span>
-            <span>Parçalanıyor</span>
-          </div>
-          <div class="progress-step" id="pStep3">
-            <span class="step-dot pending"></span>
-            <span>Embedding oluşturuluyor</span>
-          </div>
-          <div class="progress-step" id="pStep4">
-            <span class="step-dot pending"></span>
-            <span>Kaydediliyor</span>
+    <!-- İstatistikler -->
+    <div class="row g-2 mb-3">
+      <div class="col-6">
+        <div class="card text-center border-primary">
+          <div class="card-body py-2">
+            <div class="fw-bold fs-4 text-primary" id="scDocs">0</div>
+            <div class="text-muted small">Doküman</div>
           </div>
         </div>
       </div>
-
-      <!-- Hata Mesajı -->
-      <div class="upload-error" id="uploadError" style="display:none;"></div>
-    </div>
-
-    <!-- ─── Doküman Listesi ─── -->
-    <div class="sidebar-section flex-grow">
-      <div class="section-label">
-        Dokümanlar
-        <span class="doc-count-badge" id="docCountBadge">0</span>
+      <div class="col-6">
+        <div class="card text-center border-success">
+          <div class="card-body py-2">
+            <div class="fw-bold fs-4 text-success" id="scChunks">0</div>
+            <div class="text-muted small">Chunk</div>
+          </div>
+        </div>
       </div>
-      <div class="document-list" id="documentList">
-        <div class="doc-empty" id="docEmpty">
-          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2">
-            <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/>
-            <polyline points="13 2 13 9 20 9"/>
-          </svg>
-          <p>Henüz doküman yüklenmedi</p>
+      <div class="col-12">
+        <div class="card border-warning">
+          <div class="card-body py-2 d-flex justify-content-between align-items-center">
+            <span class="text-muted small">LLM</span>
+            <span class="badge bg-warning text-dark" id="scLlm">—</span>
+          </div>
+        </div>
+      </div>
+      <div class="col-12">
+        <div class="card border-info">
+          <div class="card-body py-2 d-flex justify-content-between align-items-center">
+            <span class="text-muted small">Embedding</span>
+            <span class="badge bg-info text-dark" id="scModel">—</span>
+          </div>
         </div>
       </div>
     </div>
 
-    <!-- ─── Alt Bilgi İstatistikleri ─── -->
-    <div class="sidebar-footer">
-      <div class="footer-stat">
-        <span class="footer-stat-val" id="statChunks">0</span>
-        <span class="footer-stat-lbl">Chunk</span>
+    <!-- Yükleme -->
+    <div class="mb-3">
+      <label class="form-label fw-semibold">
+        <i class="bi bi-upload me-1"></i>Doküman Yükle
+      </label>
+      <div class="upload-zone border border-2 border-dashed rounded p-3 text-center" id="uploadZone">
+        <input type="file" id="fileInput" accept=".pdf,.txt" class="d-none"/>
+        <i class="bi bi-cloud-upload fs-3 text-primary"></i>
+        <p class="mb-1 small fw-semibold">Tıkla veya sürükle</p>
+        <p class="text-muted" style="font-size:11px;">PDF · TXT · Maks 50MB</p>
       </div>
-      <div class="footer-divider"></div>
-      <div class="footer-stat">
-        <span class="footer-stat-val" id="statModel">—</span>
-        <span class="footer-stat-lbl">Model</span>
+
+      <!-- Progress -->
+      <div id="uploadProgress" class="d-none mt-2">
+        <div class="d-flex justify-content-between small mb-1">
+          <span id="progressFilename" class="text-truncate">dosya.pdf</span>
+          <span id="progressPct">0%</span>
+        </div>
+        <div class="progress mb-2" style="height:6px;">
+          <div class="progress-bar progress-bar-striped progress-bar-animated" id="progressBar" style="width:0%"></div>
+        </div>
+        <div class="d-flex flex-column gap-1" id="progressSteps">
+          <div class="step-row small text-muted" id="pStep1"><i class="bi bi-circle me-1"></i>Metin çıkarılıyor</div>
+          <div class="step-row small text-muted" id="pStep2"><i class="bi bi-circle me-1"></i>Parçalanıyor</div>
+          <div class="step-row small text-muted" id="pStep3"><i class="bi bi-circle me-1"></i>Embedding oluşturuluyor</div>
+          <div class="step-row small text-muted" id="pStep4"><i class="bi bi-circle me-1"></i>Kaydediliyor</div>
+        </div>
       </div>
+      <div id="uploadError" class="alert alert-danger small py-2 mt-2 d-none"></div>
     </div>
-  </aside>
 
-  <!-- ═══════════════════════════════════════════════════════════ -->
-  <!--  ANA İÇERİK — Soru-Cevap                                  -->
-  <!-- ═══════════════════════════════════════════════════════════ -->
-  <main class="main-content">
-
-    <!-- Başlık -->
-    <header class="topbar">
-      <div class="topbar-left">
-        <button class="sidebar-toggle" id="sidebarToggle" title="Paneli gizle/göster">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="3" y1="12" x2="21" y2="12"/>
-            <line x1="3" y1="6"  x2="21" y2="6"/>
-            <line x1="3" y1="18" x2="21" y2="18"/>
-          </svg>
-        </button>
-        <div class="topbar-title">
-          <span class="topbar-name">DocuAsk</span>
-          <span class="topbar-tag">Bitirme Projesi · RAG Tabanlı Soru-Cevap</span>
-        </div>
+    <!-- Doküman Listesi -->
+    <div class="flex-grow-1">
+      <div class="d-flex justify-content-between align-items-center mb-2">
+        <span class="fw-semibold small"><i class="bi bi-folder me-1"></i>Dokümanlar</span>
+        <span class="badge bg-primary" id="docCountBadge">0</span>
       </div>
-      <div class="topbar-right">
-        <div class="active-doc-pill" id="activeDocPill" style="display:none;">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-            <polyline points="14 2 14 8 20 8"/>
-          </svg>
-          <span id="activeDocName">tüm dokümanlar</span>
-          <button class="pill-clear" id="clearDocFilter" title="Filtreyi kaldır">×</button>
-        </div>
-        <button class="clear-chat-btn" id="clearChatBtn" title="Sohbeti temizle" style="display:none;">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-            <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
-          </svg>
-          Temizle
-        </button>
-        <a href="/api/docs" target="_blank" class="api-link" title="Swagger API Dökümantasyonu">
-          API Docs
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
-            <polyline points="15 3 21 3 21 9"/>
-            <line x1="10" y1="14" x2="21" y2="3"/>
-          </svg>
-        </a>
-      </div>
-    </header>
-
-    <!-- İstatistik Kartları -->
-    <div class="stats-bar" id="statsBar">
-      <div class="stat-card">
-        <div class="stat-card-icon docs">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-            <polyline points="14 2 14 8 20 8"/>
-          </svg>
-        </div>
-        <div class="stat-card-body">
-          <span class="stat-card-val" id="scDocs">0</span>
-          <span class="stat-card-lbl">Doküman</span>
-        </div>
-      </div>
-
-      <div class="stat-card">
-        <div class="stat-card-icon chunks">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
-            <rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
-          </svg>
-        </div>
-        <div class="stat-card-body">
-          <span class="stat-card-val" id="scChunks">0</span>
-          <span class="stat-card-lbl">Chunk</span>
-        </div>
-      </div>
-
-      <div class="stat-card">
-        <div class="stat-card-icon model">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="12" cy="12" r="3"/>
-            <path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/>
-          </svg>
-        </div>
-        <div class="stat-card-body">
-          <span class="stat-card-val stat-small" id="scModel">—</span>
-          <span class="stat-card-lbl">Embedding</span>
-        </div>
-      </div>
-
-      <div class="stat-card">
-        <div class="stat-card-icon llm">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-          </svg>
-        </div>
-        <div class="stat-card-body">
-          <span class="stat-card-val stat-small" id="scLlm">—</span>
-          <span class="stat-card-lbl">LLM</span>
+      <div id="documentList">
+        <div id="docEmpty" class="text-center text-muted py-4 small">
+          <i class="bi bi-inbox fs-3 d-block mb-1"></i>
+          Henüz doküman yüklenmedi
         </div>
       </div>
     </div>
 
-    <!-- ─── Sohbet Alanı ─── -->
-    <div class="chat-area" id="chatArea">
+  </div>
 
-      <!-- Hoşgeldin Ekranı -->
-      <div class="welcome-screen" id="welcomeScreen">
+  <!-- SAĞ PANEL — SOHBET -->
+  <div class="col-md-9 d-flex flex-column p-0">
 
-        <!-- Proje Başlığı -->
-        <div class="project-header">
-          <div class="project-logo-ring">
-            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-            </svg>
+    <!-- Aktif doküman filtresi -->
+    <div class="border-bottom px-3 py-2 bg-white d-flex align-items-center justify-content-between" style="min-height:44px;">
+      <div id="activeDocPill" class="d-none align-items-center gap-2">
+        <i class="bi bi-funnel-fill text-primary small"></i>
+        <span class="small fw-semibold" id="activeDocName"></span>
+        <button class="btn btn-sm btn-outline-secondary py-0 px-1" id="clearDocFilter" style="font-size:11px;">✕ Kaldır</button>
+      </div>
+      <div id="noFilterMsg" class="text-muted small">Tüm dokümanlarda aranıyor</div>
+      <button class="btn btn-sm btn-outline-danger d-none" id="clearChatBtn">
+        <i class="bi bi-trash me-1"></i>Temizle
+      </button>
+    </div>
+
+    <!-- Sohbet alanı -->
+    <div class="flex-grow-1 overflow-auto p-3" id="chatArea">
+
+      <!-- Karşılama -->
+      <div id="welcomeScreen" class="d-flex flex-column align-items-center justify-content-center h-100 text-center py-4">
+        <div class="mb-3">
+          <div class="bg-primary text-white rounded-circle d-inline-flex align-items-center justify-content-center mb-3" style="width:64px;height:64px;">
+            <i class="bi bi-robot fs-3"></i>
           </div>
-          <h1 class="project-title">DocuAsk</h1>
-          <p class="project-subtitle">RAG Tabanlı Doküman Soru-Cevap Sistemi</p>
-          <div class="tech-badges">
-            <span class="tech-badge">FastAPI</span>
-            <span class="tech-badge">ChromaDB</span>
-            <span class="tech-badge">Llama 3.3</span>
-            <span class="tech-badge">Sentence Transformers</span>
-            <span class="tech-badge">OCR</span>
+          <h4 class="fw-bold">DocuAsk'a Hoş Geldiniz</h4>
+          <p class="text-muted">Sol panelden PDF veya TXT yükleyin, ardından soru sorun.</p>
+        </div>
+
+        <!-- RAG Pipeline -->
+        <div class="card border mb-3 w-100" style="max-width:700px;">
+          <div class="card-body py-3">
+            <p class="text-muted small fw-bold text-uppercase mb-3">RAG Mimarisi</p>
+            <div class="d-flex flex-wrap justify-content-center align-items-center gap-2">
+              <div class="pipeline-box bg-primary bg-opacity-10 border-primary">
+                <i class="bi bi-file-pdf text-primary"></i>
+                <span>Yükleme<br/><small class="text-muted">PDF/TXT/OCR</small></span>
+              </div>
+              <i class="bi bi-arrow-right text-muted"></i>
+              <div class="pipeline-box bg-purple bg-opacity-10" style="background:#f3e8ff;border-color:#a855f7;">
+                <i class="bi bi-scissors" style="color:#a855f7;"></i>
+                <span>Chunking<br/><small class="text-muted">1200 char</small></span>
+              </div>
+              <i class="bi bi-arrow-right text-muted"></i>
+              <div class="pipeline-box bg-success bg-opacity-10 border-success">
+                <i class="bi bi-cpu text-success"></i>
+                <span>Embedding<br/><small class="text-muted">MiniLM-L6</small></span>
+              </div>
+              <i class="bi bi-arrow-right text-muted"></i>
+              <div class="pipeline-box bg-warning bg-opacity-10 border-warning">
+                <i class="bi bi-database text-warning"></i>
+                <span>ChromaDB<br/><small class="text-muted">Cosine sim.</small></span>
+              </div>
+              <i class="bi bi-arrow-right text-muted"></i>
+              <div class="pipeline-box bg-danger bg-opacity-10 border-danger">
+                <i class="bi bi-search text-danger"></i>
+                <span>Retrieval<br/><small class="text-muted">Top-K</small></span>
+              </div>
+              <i class="bi bi-arrow-right text-muted"></i>
+              <div class="pipeline-box bg-info bg-opacity-10 border-info">
+                <i class="bi bi-chat-dots text-info"></i>
+                <span>Llama 3.3<br/><small class="text-muted">70B</small></span>
+              </div>
+            </div>
           </div>
         </div>
 
-        <!-- RAG Pipeline Diyagramı -->
-        <div class="rag-pipeline">
-          <div class="pipeline-label">RAG Mimarisi — Nasıl Çalışır?</div>
-          <div class="pipeline-steps">
-
-            <div class="pipe-step">
-              <div class="pipe-icon" style="background:linear-gradient(135deg,#3b82f6,#1d4ed8)">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
-                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                  <polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
-                </svg>
-              </div>
-              <div class="pipe-text">
-                <span class="pipe-name">Doküman Yükleme</span>
-                <span class="pipe-desc">PDF / TXT + OCR</span>
-              </div>
-            </div>
-
-            <div class="pipe-arrow">→</div>
-
-            <div class="pipe-step">
-              <div class="pipe-icon" style="background:linear-gradient(135deg,#8b5cf6,#6d28d9)">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
-                  <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
-                  <rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
-                </svg>
-              </div>
-              <div class="pipe-text">
-                <span class="pipe-name">Chunk'lama</span>
-                <span class="pipe-desc">1200 char / 150 overlap</span>
-              </div>
-            </div>
-
-            <div class="pipe-arrow">→</div>
-
-            <div class="pipe-step">
-              <div class="pipe-icon" style="background:linear-gradient(135deg,#10b981,#065f46)">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
-                  <circle cx="12" cy="12" r="3"/>
-                  <path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4"/>
-                </svg>
-              </div>
-              <div class="pipe-text">
-                <span class="pipe-name">Embedding</span>
-                <span class="pipe-desc">all-MiniLM-L6-v2</span>
-              </div>
-            </div>
-
-            <div class="pipe-arrow">→</div>
-
-            <div class="pipe-step">
-              <div class="pipe-icon" style="background:linear-gradient(135deg,#f59e0b,#b45309)">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
-                  <ellipse cx="12" cy="5" rx="9" ry="3"/>
-                  <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/>
-                  <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>
-                </svg>
-              </div>
-              <div class="pipe-text">
-                <span class="pipe-name">Vektör DB</span>
-                <span class="pipe-desc">ChromaDB (Cosine)</span>
-              </div>
-            </div>
-
-            <div class="pipe-arrow">→</div>
-
-            <div class="pipe-step">
-              <div class="pipe-icon" style="background:linear-gradient(135deg,#ef4444,#991b1b)">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
-                  <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-                </svg>
-              </div>
-              <div class="pipe-text">
-                <span class="pipe-name">Retrieval</span>
-                <span class="pipe-desc">Top-K benzerlik</span>
-              </div>
-            </div>
-
-            <div class="pipe-arrow">→</div>
-
-            <div class="pipe-step pipe-step-last">
-              <div class="pipe-icon" style="background:linear-gradient(135deg,#4f46e5,#7c3aed)">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
-                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-                </svg>
-              </div>
-              <div class="pipe-text">
-                <span class="pipe-name">LLM Cevap</span>
-                <span class="pipe-desc">Llama 3.3 70B</span>
-              </div>
-            </div>
-
+        <!-- Örnek sorular -->
+        <div>
+          <p class="text-muted small mb-2">Örnek sorular:</p>
+          <div class="d-flex flex-wrap gap-2 justify-content-center">
+            <button class="btn btn-outline-primary btn-sm" onclick="app.setQuestion(this.textContent)">Bu doküman ne hakkında?</button>
+            <button class="btn btn-outline-primary btn-sm" onclick="app.setQuestion(this.textContent)">Özet çıkarır mısın?</button>
+            <button class="btn btn-outline-primary btn-sm" onclick="app.setQuestion(this.textContent)">Ana konuları listele</button>
+            <button class="btn btn-outline-primary btn-sm" onclick="app.setQuestion(this.textContent)">Transformer nedir?</button>
           </div>
         </div>
-
-        <!-- Örnek Sorular -->
-        <div class="welcome-example">
-          <p class="example-label">Doküman yükleyip deneyebilirsiniz:</p>
-          <div class="example-chips" id="exampleChips">
-            <button class="example-chip" onclick="app.setQuestion(this.textContent)">Bu doküman ne hakkında?</button>
-            <button class="example-chip" onclick="app.setQuestion(this.textContent)">Ana konuları özetle</button>
-            <button class="example-chip" onclick="app.setQuestion(this.textContent)">Transformer nedir?</button>
-            <button class="example-chip" onclick="app.setQuestion(this.textContent)">Özet çıkarır mısın?</button>
-          </div>
-        </div>
-
       </div>
 
       <!-- Mesajlar -->
-      <div class="messages" id="messages"></div>
-
+      <div id="messages"></div>
     </div>
 
-    <!-- ─── Soru Girişi ─── -->
-    <div class="input-area">
-      <div class="input-wrapper">
-        <textarea
-          id="questionInput"
-          class="question-input"
-          placeholder="Doküman hakkında bir soru yazın..."
-          rows="1"
-          maxlength="1000"
-        ></textarea>
-        <button class="send-btn" id="sendBtn" title="Soru gönder (Enter)">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-            <line x1="12" y1="19" x2="12" y2="5"/>
-            <polyline points="5 12 12 5 19 12"/>
-          </svg>
+    <!-- Soru girişi -->
+    <div class="border-top bg-white p-3">
+      <div class="input-group">
+        <textarea id="questionInput" class="form-control" placeholder="Doküman hakkında soru yazın..." rows="1" style="resize:none;max-height:120px;"></textarea>
+        <button class="btn btn-primary" id="sendBtn" title="Gönder (Enter)">
+          <i class="bi bi-send-fill"></i>
         </button>
       </div>
-      <div class="input-meta">
-        <span class="input-hint">Enter ile gönder &nbsp;·&nbsp; Shift+Enter ile yeni satır</span>
-        <span class="char-count" id="charCount">0 / 1000</span>
+      <div class="d-flex justify-content-between mt-1">
+        <small class="text-muted">Enter ile gönder · Shift+Enter ile yeni satır</small>
+        <small class="text-muted" id="charCount">0 / 1000</small>
       </div>
     </div>
 
-  </main>
+  </div>
+</div>
+</div>
 
-  <!-- ═══════════════════════════════════════════════════════════ -->
-  <!--  GLOBAL TOAST BİLDİRİMLERİ                                 -->
-  <!-- ═══════════════════════════════════════════════════════════ -->
-  <div class="toast-container" id="toastContainer"></div>
+<!-- Toast container -->
+<div class="toast-container position-fixed bottom-0 end-0 p-3" id="toastContainer"></div>
 
-  <script src="/static/js/app.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script src="/static/js/app.js"></script>
 </body>
 </html>
