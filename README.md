@@ -328,4 +328,4 @@ MIT License — see [LICENSE](LICENSE) for details.
 
 ---
 
-*Developed by [Emrullah Yıldız](https://github.com/YildizEmrullah) · Computer Engineering · Bachelor's Capstone Project*
+*Developed by [Emrullah Yıldız](https://github.com/YildizEmrullah) · Computer Engineering 
